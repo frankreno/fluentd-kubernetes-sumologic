@@ -12,7 +12,6 @@ RUN [ -f /bin/entrypoint.sh ] && /bin/entrypoint.sh echo || : && \
     gem install fluent-plugin-systemd -v 0.3.1 && \
     gem install fluent-plugin-record-reformer -v 0.9.1 && \
     gem install fluent-plugin-kubernetes_metadata_filter -v 1.0.2 && \
-    gem install fluent-plugin-sumologic_output -v 1.4.0 && \
     gem install fluent-plugin-concat -v 2.3.0 && \
     gem install fluent-plugin-rewrite-tag-filter -v 2.1.0 && \
     gem install fluent-plugin-prometheus -v 1.1.0 && \
@@ -66,5 +65,10 @@ ENV FORWARD_INPUT_PORT "24224"
 
 COPY --from=builder /var/lib/gems /var/lib/gems
 COPY ./entrypoint.sh /fluentd/
+COPY lib/fluent/plugin/out_sumologic.rb /fluentd/plugins
+
+RUN ls -al /fluentd
+RUN ls -al /fluentd/etc
+RUN ls -al /fluentd/plugins
 
 ENTRYPOINT ["/fluentd/entrypoint.sh"]

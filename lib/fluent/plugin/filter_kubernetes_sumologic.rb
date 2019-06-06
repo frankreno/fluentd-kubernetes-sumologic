@@ -32,21 +32,21 @@ module Fluent::Plugin
     end
 
     def sanitize_pod_name(k8s_metadata)
-        # Strip out dynamic bits from pod name.
-        # NOTE: Kubernetes deployments append a template hash.
-        # At the moment this can be in 3 different forms:
-        #   1) pre-1.8: numeric in pod_template_hash and pod_parts[-2]
-        #   2) 1.8-1.11: numeric in pod_template_hash, hash in pod_parts[-2]
-        #   3) post-1.11: hash in pod_template_hash and pod_parts[-2]
+      # Strip out dynamic bits from pod name.
+      # NOTE: Kubernetes deployments append a template hash.
+      # At the moment this can be in 3 different forms:
+      #   1) pre-1.8: numeric in pod_template_hash and pod_parts[-2]
+      #   2) 1.8-1.11: numeric in pod_template_hash, hash in pod_parts[-2]
+      #   3) post-1.11: hash in pod_template_hash and pod_parts[-2]
 
-        pod_parts = k8s_metadata[:pod].split("-")
-        pod_template_hash = k8s_metadata[:"label:pod-template-hash"]
-        if (pod_template_hash == pod_parts[-2] ||
-            to_hash(pod_template_hash) == pod_parts[-2])
-          k8s_metadata[:pod_name] = pod_parts[0..-3].join("-")
-        else
-          k8s_metadata[:pod_name] = pod_parts[0..-2].join("-")
-        end
+      pod_parts = k8s_metadata[:pod].split("-")
+      pod_template_hash = k8s_metadata[:"label:pod-template-hash"]
+      if (pod_template_hash == pod_parts[-2] ||
+          to_hash(pod_template_hash) == pod_parts[-2])
+        k8s_metadata[:pod_name] = pod_parts[0..-3].join("-")
+      else
+        k8s_metadata[:pod_name] = pod_parts[0..-2].join("-")
+      end
     end
 
     def to_hash(pod_template_hash)
@@ -60,6 +60,7 @@ module Fluent::Plugin
       # Set the sumo metadata fields
       sumo_metadata = record["_sumo_metadata"] || {}
       record["_sumo_metadata"] = sumo_metadata
+      log_fields = {}
       sumo_metadata[:log_format] = @log_format
       sumo_metadata[:host] = @source_host if @source_host
       sumo_metadata[:source] = @source_name if @source_name
@@ -102,11 +103,11 @@ module Fluent::Plugin
         # Clone kubernetes hash so we don't override the cache
         kubernetes = record["kubernetes"].clone
         k8s_metadata = {
-          :namespace => kubernetes["namespace_name"],
-          :pod => kubernetes["pod_name"],
-          :pod_id => kubernetes['pod_id'],
-          :container => kubernetes["container_name"],
-          :source_host => kubernetes["host"],
+            :namespace => kubernetes["namespace_name"],
+            :pod => kubernetes["pod_name"],
+            :pod_id => kubernetes['pod_id'],
+            :container => kubernetes["container_name"],
+            :source_host => kubernetes["host"],
         }
 
 
@@ -194,6 +195,27 @@ module Fluent::Plugin
         end
         # Strip sumologic.com annotations
         kubernetes.delete("annotations") if annotations
+
+        if @log_format == "fields" and record.key?("docker") and not record.fetch("docker").nil?
+          record["docker"].each {|k, v| log_fields[k] = v}
+        end
+
+        if @log_format == "fields" and record.key?("kubernetes") and not record.fetch("kubernetes").nil? and record["kubernetes"].key?("labels") and not record["kubernetes"].fetch("labels").nil?
+          kubernetes["labels"].each { |k, v| log_fields["#{k}".to_sym] = v }
+          log_fields["container"] = kubernetes["container_name"]
+          log_fields["namespace"] = kubernetes["namespace_name"]
+          log_fields["pod"] = kubernetes["pod_name"]
+          log_fields["pod_id"] = kubernetes["pod_id"]
+          log_fields["host"] = kubernetes["host"]
+          log_fields["master_url"] = kubernetes["master_url"]
+          log_fields["namespace_id"] = kubernetes["namespace_id"]
+        end
+      end
+
+      if @log_format == "fields" and not log_fields.nil?
+        sumo_metadata[:fields] = log_fields.map{|k,v| "#{k}=#{v}"}.join(',')
+        record.delete("docker")
+        record.delete("kubernetes")
       end
       record
     end

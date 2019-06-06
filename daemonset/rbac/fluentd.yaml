@@ -10,15 +10,15 @@ kind: ClusterRole
 metadata:
   name: fluentd
 rules:
-- apiGroups:
-  - ""
-  resources:
-  - namespaces
-  - pods
-  verbs:
-  - get
-  - list
-  - watch
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
 
 ---
 kind: ClusterRoleBinding
@@ -30,12 +30,10 @@ roleRef:
   name: fluentd
   apiGroup: rbac.authorization.k8s.io
 subjects:
-- kind: ServiceAccount
-  name: fluentd
-  # This namespace setting will limit fluentd to watching/listing/getting pods in the default namespace. If you want it to be able to log your kube-system namespace as well, comment the line out.
-  namespace: default
-
---- 
+  - kind: ServiceAccount
+    name: fluentd
+    namespace: sumologic
+---
 apiVersion: extensions/v1beta1
 kind: DaemonSet
 metadata:
@@ -51,50 +49,49 @@ spec:
     spec:
       serviceAccountName: fluentd
       volumes:
-      - name: pos-files
-        hostPath:
-          path: /var/run/fluentd-pos
-          type: ""
-      - name: host-logs
-        hostPath:
-          path: /var/log/
-      - name: docker-logs
-        hostPath:
-          path: /var/lib/docker
-      - name: fluentd-sumologic-config
-        configMap:
-          name: fluentd-sumologic-config
-      containers:
-      - image: sumologic/fluentd-kubernetes-sumologic:latest
-        name: fluentd
-        imagePullPolicy: Always
-        volumeMounts:
-        - name: fluentd-sumologic-config
-          mountPath: /fluentd/etc
-        - name: host-logs
-          mountPath: /mnt/log/
-          readOnly: true
-        - name: host-logs
-          mountPath: /var/log/
-          readOnly: true
-        - name: docker-logs
-          mountPath: /var/lib/docker/
-          readOnly: true
         - name: pos-files
-          mountPath: /mnt/pos/
-        env:
-        - name: COLLECTOR_URL
-          valueFrom:
-            secretKeyRef:
-              name: sumologic
-              key: collector-url
-        # Improve GC for memory limited envs like docker.
-        - name: RUBY_GC_HEAP_OLDOBJECT_LIMIT_FACTOR
-          value: "0.9"
+          hostPath:
+            path: /var/run/fluentd-pos
+            type: ""
+        - name: host-logs
+          hostPath:
+            path: /var/log/
+        - name: docker-logs
+          hostPath:
+            path: /var/lib/docker
+        - name: fluentd-sumologic-config
+          configMap:
+            name: fluentd-sumologic-config
+      containers:
+        - image: frankreno/fluentd-kubernetes-sumologic:latest
+          name: fluentd
+          imagePullPolicy: Always
+          volumeMounts:
+            - name: fluentd-sumologic-config
+              mountPath: /fluentd/etc
+            - name: host-logs
+              mountPath: /mnt/log/
+              readOnly: true
+            - name: host-logs
+              mountPath: /var/log/
+              readOnly: true
+            - name: docker-logs
+              mountPath: /var/lib/docker/
+              readOnly: true
+            - name: pos-files
+              mountPath: /mnt/pos/
+          env:
+            - name: COLLECTOR_URL
+              valueFrom:
+                secretKeyRef:
+                  name: sumologic
+                  key: collector-url
+            - name: LOG_FORMAT
+              value: fields
       tolerations:
-          #- operator: "Exists"
-          - effect: "NoSchedule"
-            key: "node-role.kubernetes.io/master"
+        - operator: "Exists"
+        - effect: "NoSchedule"
+          key: "node-role.kubernetes.io/master"
 
 ---
 apiVersion: v1
@@ -889,7 +886,7 @@ data:
       <storage>
         @type local
         persistent true
-        path /mnt/pos/etcdadm-save.log.pos
+        path /mnt/pos/etcdadm-save.log.pospush
       </storage>
       tag etcdadm-save
     </source>

@@ -114,6 +114,9 @@ module Fluent::Plugin
         if kubernetes.has_key? "labels"
           kubernetes["labels"].each { |k, v| k8s_metadata["label:#{k}".to_sym] = v }
         end
+        if kubernetes.has_key? "namespace_labels"
+          kubernetes["namespace_labels"].each { |k, v| k8s_metadata["namespace_label:#{k}".to_sym] = v }
+        end
         k8s_metadata.default = "undefined"
 
         annotations = kubernetes.fetch("annotations", {})
@@ -184,6 +187,7 @@ module Fluent::Plugin
           record["kubernetes"].delete("pod_id")
           record["kubernetes"].delete("namespace_id")
           record["kubernetes"].delete("labels")
+          record["kubernetes"].delete("namespace_labels")
           record["kubernetes"].delete("master_url")
           record["kubernetes"].delete("annotations")
         end
@@ -200,15 +204,20 @@ module Fluent::Plugin
           record["docker"].each {|k, v| log_fields[k] = v}
         end
 
-        if @log_format == "fields" and record.key?("kubernetes") and not record.fetch("kubernetes").nil? and record["kubernetes"].key?("labels") and not record["kubernetes"].fetch("labels").nil?
-          kubernetes["labels"].each { |k, v| log_fields["#{k}".to_sym] = v }
-          log_fields["container"] = kubernetes["container_name"]
-          log_fields["namespace"] = kubernetes["namespace_name"]
-          log_fields["pod"] = kubernetes["pod_name"]
-          log_fields["pod_id"] = kubernetes["pod_id"]
-          log_fields["host"] = kubernetes["host"]
-          log_fields["master_url"] = kubernetes["master_url"]
-          log_fields["namespace_id"] = kubernetes["namespace_id"]
+        if @log_format == "fields" and record.key?("kubernetes") and not record.fetch("kubernetes").nil?
+          if kubernetes.has_key? "labels"
+            kubernetes["labels"].each { |k, v| log_fields["pod_labels_#{k}".to_sym] = v }
+          end
+          if kubernetes.has_key? "namespace_labels"
+            kubernetes["namespace_labels"].each { |k, v| log_fields["namespace_labels_#{k}".to_sym] = v }
+          end
+          log_fields["container"] = kubernetes["container_name"] unless kubernetes["container_name"].nil?
+          log_fields["namespace"] = kubernetes["namespace_name"] unless kubernetes["namespace_name"].nil?
+          log_fields["pod"] = kubernetes["pod_name"] unless kubernetes["pod_name"].nil?
+          log_fields["pod_id"] = kubernetes["pod_id"] unless kubernetes["pod_id"].nil?
+          log_fields["host"] = kubernetes["host"] unless kubernetes["host"].nil?
+          log_fields["master_url"] = kubernetes["master_url"] unless kubernetes["master_url"].nil?
+          log_fields["namespace_id"] = kubernetes["namespace_id"] unless kubernetes["namespace_id"].nil?
         end
       end
 
